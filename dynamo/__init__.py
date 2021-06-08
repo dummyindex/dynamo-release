@@ -10,7 +10,6 @@ from . import pp
 from . import est
 from . import tl
 from . import vf
-from . import pd
 from . import pl
 from . import mv
 from . import sim
@@ -28,6 +27,7 @@ from .dynamo_logger import (
     main_critical,
     main_exception,
 )
+from . import pred
 
 # alias
 config = configuration

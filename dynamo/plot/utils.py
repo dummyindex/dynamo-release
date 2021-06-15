@@ -162,7 +162,8 @@ def _matplotlib_points(
     sym_c=False,
     inset_dict={},
     show_colorbar=True,
-    **kwargs,
+    return_cmap=False,
+    **kwargs: dict,
 ):
     import matplotlib.pyplot as plt
     from matplotlib.ticker import MaxNLocator
@@ -194,8 +195,8 @@ def _matplotlib_points(
             )
         if color_key is None:
             main_debug("color_key is None")
-            cmap = copy.copy(matplotlib.cm.get_cmap(color_key_cmap))
-            cmap.set_bad("lightgray")
+            cmap_ = copy.copy(matplotlib.cm.get_cmap(color_key_cmap))
+            # cmap_.set_bad("lightgray")
             colors = None
 
             if highlights is None:
@@ -586,7 +587,11 @@ def _matplotlib_points(
     else:
         main_debug("hiding legend")
 
-    return ax, colors
+    main_debug("[_matplotlib_points] Returning colors:" + str(colors))
+    if return_cmap:
+        return ax, colors, cmap
+    else:
+        return ax, colors
 
 
 def _datashade_points(

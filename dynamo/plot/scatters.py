@@ -304,6 +304,8 @@ def scatters(
             % (calpha)
         )
     group_colors = ["b", "g", "r", "c", "m", "y", "k", "w"]
+
+    # stack_colors and add group gamma features will use sequential cmaps below
     sequential_cmaps = [
         "Greys",
         "Purples",
@@ -401,12 +403,12 @@ def scatters(
     if type(basis) is str:
         basis = [basis]
 
-    if stack_colors and len(color) > len(sequential_cmaps):
+    if (stack_colors or add_group_gamma_fit) and len(color) > len(sequential_cmaps):
         main_warning(
             "#color: %d passed in is greater than #sequential cmaps: %d, will reuse sequential maps"
             % (len(color), len(sequential_cmaps))
         )
-        main_warning("You should consider decreasing your #color")
+        main_warning("You should consider decreasing your #color (elements passed in color argument)")
 
     n_c, n_l, n_b, n_x, n_y = (
         1 if color is None else len(color),
@@ -456,6 +458,11 @@ def scatters(
     ax_index = 0
     axes_list, color_list = [], []
     color_out = None
+    if add_group_gamma_fit:
+        # _cmap = sequential_cmaps[cur_color_index]
+        if color_key and (len(color_key) != len(color)):
+            main_info("Setting group categorical color key. User color_key will be ignored")
+            color_key = [group_colors[color_index] for color_index, some_color in enumerate(color)]
 
     def _plot_basis_layer(cur_b, cur_l):
         """a helper function for plotting a specific basis/layer data
@@ -467,7 +474,7 @@ def scatters(
         cur_l :
             current layer
         """
-        nonlocal adata, x, y, _background, cmap, color_out, labels, values, ax, sym_c, scatter_kwargs, ax_index
+        nonlocal adata, x, y, _background, cmap, color_out, labels, values, ax, sym_c, scatter_kwargs, ax_index, color_key
 
         if cur_l in ["acceleration", "curvature", "divergence", "velocity_S", "velocity_T"]:
             cur_l_smoothed = cur_l
@@ -491,27 +498,27 @@ def scatters(
         if stack_colors:
             _stack_background_adata_indices = np.ones(len(adata), dtype=bool)
 
-        for cur_c in color:
+        for cur_color_index, cur_c in enumerate(color):
             main_debug("coloring scatter of cur_c: %s" % str(cur_c))
             if not stack_colors:
                 cur_title = cur_c
             else:
                 cur_title = stack_colors_title
-            _color = _get_adata_color(adata, cur_l, cur_c)
+            _color_values = _get_adata_color(adata, cur_l, cur_c)
 
             # select data rows based on stack color thresholding
             _values = values
             if stack_colors:
                 main_debug("Subsetting adata by stack_colors")
-                _adata = adata[_color > stack_colors_threshold]
+                _adata = adata[_color_values > stack_colors_threshold]
                 _stack_background_adata_indices = np.logical_and(
-                    _stack_background_adata_indices, (_color < stack_colors_threshold)
+                    _stack_background_adata_indices, (_color_values < stack_colors_threshold)
                 )
                 if values:
-                    _values = values[_color > stack_colors_threshold]
-                _color = _color[_color > stack_colors_threshold]
+                    _values = values[_color_values > stack_colors_threshold]
+                _color_values = _color_values[_color_values > stack_colors_threshold]
                 main_debug("stack colors: _adata len after thresholding by color value: %d" % (len(_adata)))
-                if len(_color) == 0:
+                if len(_color_values) == 0:
                     main_info("skipping color %s because no point of %s is above threshold" % (cur_c, cur_c))
                     continue
             else:
@@ -526,8 +533,10 @@ def scatters(
                 and len(y) == _adata.n_obs
             ):
                 x, y = [x], [y]
-            for cur_x, cur_y in zip(x, y):  # here x / y are arrays
+            for cur_x, cur_y in zip(x, y):
                 main_debug("handling coordinates, cur_x: %s, cur_y: %s" % (cur_x, cur_y))
+
+                # handle different types of cur_x and cur_y below
                 if type(cur_x) is int and type(cur_y) is int:
                     points = pd.DataFrame(
                         {
@@ -618,7 +627,7 @@ def scatters(
                     )
                     group_color, group_median = (
                         np.zeros((1, len(uniq_grp))).flatten()
-                        if isinstance(_color[0], Number)
+                        if isinstance(_color_values[0], Number)
                         else np.zeros((1, len(uniq_grp))).astype("str").flatten(),
                         np.zeros((len(uniq_grp), 2)),
                     )
@@ -633,12 +642,14 @@ def scatters(
                             points.iloc[np.where(groups == cur_grp)[0], :2],
                             0,
                         )
-                        if isinstance(_color[0], Number):
-                            group_color[ind] = np.nanmedian(np.array(_color)[np.where(groups == cur_grp)[0]])
+                        if isinstance(_color_values[0], Number):
+                            group_color[ind] = np.nanmedian(np.array(_color_values)[np.where(groups == cur_grp)[0]])
                         else:
-                            group_color[ind] = pd.Series(_color)[np.where(groups == cur_grp)[0]].value_counts().index[0]
+                            group_color[ind] = (
+                                pd.Series(_color_values)[np.where(groups == cur_grp)[0]].value_counts().index[0]
+                            )
 
-                    points, _color = (
+                    points, _color_values = (
                         pd.DataFrame(
                             group_median,
                             index=uniq_grp,
@@ -648,10 +659,10 @@ def scatters(
                     )
                 # https://stackoverflow.com/questions/4187185/how-can-i-check-if-my-python-object-is-a-number
                 # answer from Boris.
-                is_not_continuous = not isinstance(_color[0], Number) or _color.dtype.name == "category"
+                is_not_continuous = not isinstance(_color_values[0], Number) or _color_values.dtype.name == "category"
 
                 if is_not_continuous:
-                    labels = np.asarray(_color) if is_categorical_dtype(_color) else _color
+                    labels = np.asarray(_color_values) if is_categorical_dtype(_color_values) else _color_values
                     if theme is None:
                         if _background in ["#ffffff", "black"]:
                             _theme_ = "glasbey_dark"
@@ -660,7 +671,7 @@ def scatters(
                     else:
                         _theme_ = theme
                 else:
-                    _values = _color
+                    _values = _color_values
                     if theme is None:
                         if _background in ["#ffffff", "black"]:
                             _theme_ = "inferno" if cur_l != "velocity" else "div_blue_black_red"
@@ -699,9 +710,9 @@ def scatters(
                 if highlights is not None:
                     if is_list_of_lists(highlights):
                         _highlights = highlights[color.index(cur_c)]
-                        _highlights = _highlights if all([i in _color for i in _highlights]) else None
+                        _highlights = _highlights if all([i in _color_values for i in _highlights]) else None
                     else:
-                        _highlights = highlights if all([i in _color for i in highlights]) else None
+                        _highlights = highlights if all([i in _color_values for i in highlights]) else None
 
                 if smooth and not is_not_continuous:
                     main_debug("smooth and not continuous")
@@ -717,9 +728,10 @@ def scatters(
                 else:
                     point_coords = affine_transform(points.values, affine_transform_A, affine_transform_b)
 
+                cmap_out = None  # cmap_out will be used for add_group_gamma_fit
                 if points.shape[0] <= figsize[0] * figsize[1] * 100000:
                     main_debug("drawing with _matplotlib_points function")
-                    ax, color_out = _matplotlib_points(
+                    ax, color_out, cmap_out = _matplotlib_points(
                         # points.values,
                         point_coords,
                         ax,
@@ -740,6 +752,7 @@ def scatters(
                         calpha=calpha,
                         sym_c=sym_c,
                         inset_dict=inset_dict,
+                        return_cmap=True,
                         **scatter_kwargs,
                     )
                 else:
@@ -801,33 +814,42 @@ def scatters(
                             "_adata does not seem to have %s column. Velocity estimation is required "
                             "before running this function." % k_name
                         )
-                if group is not None and add_group_gamma_fit and cur_b in _adata.var_names[_adata.var.use_for_dynamics]:
-                    cell_groups = _adata.obs[group]
-                    unique_groups = np.unique(cell_groups)
+                if add_group_gamma_fit and cur_b in _adata.var_names[_adata.var.use_for_dynamics]:
+                    main_debug("adding group gamma fits")
+                    # here group means color. Group argument is used for aggregate only
+                    group = cur_c
+                    groups = _adata.obs[group]
+                    unique_groups = np.unique(groups)
                     k_suffix = "gamma_k" if _adata.uns["dynamics"]["experiment_type"] == "one-shot" else "gamma"
                     for group_idx, cur_group in enumerate(unique_groups):
+                        main_debug("flag1=======")
+                        main_debug("group:" + str(group))
+                        main_debug("groups:" + str(groups))
+                        main_debug("cur_group:" + str(cur_group))
                         group_k_name = group + "_" + cur_group + "_" + k_suffix
                         group_adata = _adata[_adata.obs[group] == cur_group]
                         group_points = points.iloc[np.array(_adata.obs[group] == cur_group)]
                         group_b_key = group + "_" + cur_group + "_" + "gamma_b"
                         group_xnew = np.linspace(
-                            group_points.iloc[:, 0].min(),
-                            group_points.iloc[:, 0].max() * 0.90,
+                            group_points[cur_x].min(),
+                            group_points[cur_x].max() * 0.90,
                         )
                         group_ynew = (
-                            group_xnew * group_adata[:, cur_b].var.loc[:, group_k_name].unique()
+                            group_xnew * (group_adata[:, cur_b].var.loc[:, group_k_name].unique())
                             + group_adata[:, cur_b].var.loc[:, group_b_key].unique()
                         )
+                        # add annotation
                         ax.annotate(group + "_" + cur_group, xy=(group_xnew[-1], group_ynew[-1]))
                         if group_k_name in group_adata.var.columns:
                             if not (group_b_key in group_adata.var.columns) or all(group_adata.var[group_b_key].isna()):
                                 group_adata.var.loc[:, group_b_key] = 0
                                 main_info("No %s found, setting all bias terms to zero" % group_b_key)
+                            print("color map:", cmap_out)
                             ax.plot(
                                 group_xnew,
                                 group_ynew,
                                 dashes=[6, 2],
-                                c=group_colors[group_idx % len(group_colors)],
+                                c=cmap_out(float("inf")),
                             )
                         else:
                             raise Exception(

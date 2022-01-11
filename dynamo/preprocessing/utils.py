@@ -7,7 +7,7 @@ from sklearn.decomposition import PCA, TruncatedSVD
 
 import warnings
 import anndata
-from typing import Iterable, Union
+from typing import Iterable, Tuple, Union
 from ..dynamo_logger import LoggerManager, main_debug, main_info, main_warning, main_exception
 from ..utils import areinstance
 from ..configuration import DKM, DynamoAdataKeyManager
@@ -512,6 +512,7 @@ def normalize_mat_monocle(mat: spmatrix, szfactors, relative_expr, pseudo_expr, 
     if pseudo_expr is None:
         pseudo_expr = 1
 
+    # TODO discuss regardign different behaviors between sparse matrix and np array when input is Freeman Tukey
     if issparse(mat):
         mat.data = norm_method(mat.data + pseudo_expr) if norm_method is not None else mat.data
         if norm_method is not None and norm_method.__name__ == "Freeman_Tukey":
@@ -527,7 +528,6 @@ def Freeman_Tukey(X, inverse=False):
         res = np.sqrt(X) + np.sqrt((X + 1))
     else:
         res = (X ** 2 - 1) ** 2 / (4 * X ** 2)
-
     return res
 
 
@@ -562,11 +562,34 @@ def pca_monocle(
     n_pca_components: int = 30,
     pca_key: str = "X",
     pcs_key: str = "PCs",
-    genes_to_append=None,
+    genes_to_append: list = None,
     layer: str = None,
     return_all=False,
-):
+) -> Union[AnnData, Tuple[AnnData, object, np.array]]:
+    """General PCA wrapper used by monocle preprocess recipe. Perform PCA on specific layer
 
+    Parameters
+    ----------
+    adata
+    X_data
+        Specific sparse data matrix to perfom on (prioritize over other args such as layer), by default None
+    n_pca_components : int, optional
+        number of PCA components to reserve, by default 30
+    pca_key : str, optional
+        the key in adata.obsm to save the transformed PCA matrix from data, by default "X"
+    pcs_key : str, optional
+        the key in adata.uns to save principle components , by default "PCs"
+    genes_to_append : [type], optional
+        a list of reserved genes that will be used in PCA calculation, by default None
+    layer : str, optional
+        the key in adata.layers, and the corresponding data matrix from adata.layers[layer] will be used for PCA calculation, by default None
+    return_all : bool, optional
+        [description], by default False
+
+    Returns
+    -------
+        if return_all is True, a tuple of [adata, pca_model(either PCA or truncated PCA model) class object, X_pca] will be returned. If return_all is False, adata will be returned.
+    """
     # only use genes pass filter (based on use_for_pca) to perform dimension reduction.
     if X_data is None:
         if "use_for_pca" not in adata.var.keys():
@@ -617,9 +640,9 @@ def pca_monocle(
         X_pca = fit.transform(X_data.toarray()) if issparse(X_data) else fit.transform(X_data)
         adata.obsm[pca_key] = X_pca
         adata.uns[pcs_key] = fit.components_.T
-
         adata.uns["explained_variance_ratio_"] = fit.explained_variance_ratio_
     else:
+        main_info("use truncated SVD threshold because #obs is >%d" % (USE_TRUNCATED_SVD_THRESHOLD))
         # unscaled PCA
         fit = TruncatedSVD(
             n_components=min(n_pca_components + 1, X_data.shape[1] - 1),
@@ -642,8 +665,7 @@ def pca_monocle(
 
 
 def pca_genes(PCs: list, n_top_genes: int = 100):
-    """[summary]
-    For each gene, if the gene is n_top in some principle component
+    """For each gene, if the gene is n_top in some principle component
     then it is valid. Return all such valid genes.
     Parameters
     ----------
@@ -654,7 +676,7 @@ def pca_genes(PCs: list, n_top_genes: int = 100):
 
     Returns
     -------
-        ret
+        a list of valid genes
     """
     valid_genes = np.zeros(PCs.shape[0], dtype=bool)
     for q in PCs.T:

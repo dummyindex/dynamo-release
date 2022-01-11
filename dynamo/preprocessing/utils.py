@@ -2,7 +2,7 @@ from anndata import AnnData
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
-from scipy.sparse import issparse, csr_matrix
+from scipy.sparse import issparse, csr_matrix, spmatrix
 from sklearn.decomposition import PCA, TruncatedSVD
 
 import warnings
@@ -502,7 +502,8 @@ def get_sz_exprs(adata, layer, total_szfactor=None):
     return szfactors, CM
 
 
-def normalize_mat_monocle(mat, szfactors, relative_expr, pseudo_expr, norm_method=np.log1p):
+def normalize_mat_monocle(mat: spmatrix, szfactors, relative_expr, pseudo_expr, norm_method=np.log1p):
+    """normalize matrix based on size factors, relative expressions and pseudo expressions. Apply norm_method, default as log1p, if norm_method is not None."""
     if norm_method == np.log1p:
         pseudo_expr = 0
     if relative_expr:

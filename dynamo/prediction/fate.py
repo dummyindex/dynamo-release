@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Union
+from typing import Callable, List, Optional, Union
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
@@ -24,7 +24,7 @@ def fate(
     init_states: Optional[np.ndarray] = None,
     basis: Optional[None] = None,
     layer: str = "X",
-    dims: Union[tuple([list, None] + list(np.ScalarType))] = None,
+    dims: Optional[Union[np.number, List[np.number]]] = None,
     genes: Union[list, None] = None,
     t_end: Optional[float] = None,
     direction: str = "both",

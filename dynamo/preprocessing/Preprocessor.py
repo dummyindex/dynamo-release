@@ -2,6 +2,7 @@ from typing import Callable, List, Optional
 from anndata import AnnData
 import numpy as np
 import pandas as pd
+import pysctransform
 from .preprocessor_utils import (
     _infer_labeling_experiment_type,
     is_log1p_transformed_adata,
@@ -533,6 +534,32 @@ class Preprocessor:
 
         self.pca(adata, **self.pca_kwargs)
         temp_logger.finish_progress(progress_name="preprocess by monocle pearson residual recipe")
+
+    def config_pysctransform_recipe(self, adata):
+        self.pysctransform_SCTransform_kwargs = dict(
+            vst_flavor=None,  # "v2
+            method="theta_ml",  # "glmgp_offset"
+            n_cells=5000,
+            n_genes=2000,
+            res_clip_range="seurat",
+            var_features_n=3000,
+        )
+        self.pca = pca_monocle
+
+    def preprocess_adata_pysctransform(
+        self, adata: AnnData, tkey: Optional[str] = None, experiment_type: Optional[str] = None
+    ):
+        try:
+            import pysctransform
+        except Exception as exception:
+            print("Please check if you have installed the following option package: pysctransform")
+            print(str(exception))
+        residuals = pysctransform.SCTransform(adata, **self.pysctransform_SCTransform_kwargs)
+        adata.obsm["pearson_residuals"] = residuals
+
+        # Peform PCA on pearson residuals
+        self.pca_kwargs = dict(X_data=adata.obsm["pearson_residuals"])
+        adata.obsm["X_pca"] = self._pca(adata)
 
     def preprocess_adata(self, adata: AnnData, recipe: str = "monocle", tkey: Optional[str] = None):
         """A wrapper and interface entry for all recipes."""

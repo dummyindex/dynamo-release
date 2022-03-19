@@ -524,7 +524,7 @@ def scatters(
 
             # select data rows based on stack color thresholding
             is_numeric_color = np.issubdtype(_color.dtype, np.number)
-            if not is_numeric_color:
+            if stack_colors and not is_numeric_color:
                 main_info(
                     "skip filtering %s by stack threshold when stacking color because it is not a numeric type"
                     % (cur_c),

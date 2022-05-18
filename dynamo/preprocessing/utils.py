@@ -273,8 +273,8 @@ def filter_genes_by_pattern(
 def basic_stats(adata):
     adata.obs["nGenes"], adata.obs["nCounts"] = np.array((adata.X > 0).sum(1)), np.array((adata.X).sum(1))
     adata.var["nCells"], adata.var["nCounts"] = np.array((adata.X > 0).sum(0).T), np.array((adata.X).sum(0).T)
-    if adata.var_names.inferred_type == 'bytes':
-        adata.var_names = adata.var_names.astype('str')
+    if adata.var_names.inferred_type == "bytes":
+        adata.var_names = adata.var_names.astype("str")
     mito_genes = adata.var_names.str.upper().str.startswith("MT-")
 
     if sum(mito_genes) > 0:
@@ -334,7 +334,7 @@ def get_inrange_shared_counts_mask(adata, layers, min_shared_count, count_by="ge
         raise ValueError("Not supported shared account type")
 
     if len(np.array(layers)) == 0:
-        main_warning("No layers exist in adata, skipp filtering by shared counts")
+        main_warning("No layers exist in adata, skip filtering by shared counts")
         return np.repeat(True, adata.shape[ret_dim_index])
 
     layers = np.array(layers)[~pd.DataFrame(layers)[0].str.startswith("X_").values]
